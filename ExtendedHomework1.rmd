@@ -1,0 +1,323 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# STAT 689 Extended Homework 1
+## Rohan Tiwari
+
+## 1. Consider Exercise 3.1. In these exercises display the output
+
+### a. Issue the following commands to fit a Gaussian GAM with price as the response variable and each of the other variables as predictors
+
+```{r}
+library(AER) 
+data(HousePrices)
+library(mgcv)
+fitGaussAM = mgcv::gam(price ~ s(lotsize,k = 27) + bedrooms + factor(bathrooms) + factor(stories) + factor(driveway) + factor(recreation) + factor(fullbase) + factor(gasheat) + factor(aircon) + garage + factor(prefer), data = HousePrices,family = gaussian)
+summary(fitGaussAM)
+```
+
+
+
+### b. Issue the command gam.check(fitGaussAM) to check whether or not the residuals are consistent with the model assumptions
+
+```{r}
+mgcv::gam.check(fitGaussAM)
+```
+
+From the residuals vs linear pred. plot, it can be seen that there is some heteroskadasticity because the variance tends to increase as we move towards the right.
+Histogram of residuals plot shows some skewness indicating that residuals are not normal. 
+K-index < 1 for this model indicating that the value of k for s(lotsize) is low.P-value is 0.1. 
+
+### c. Obtain the Gamma GAM fit with the same response and predictors as used to obtain fitGaussAM in part a. This involves specifying family = Gamma in the call to gam(). Let fitGammaAM be the corresponding fit object
+```{r}
+fitGammaAM = mgcv::gam(price ~ s(lotsize,k = 27) + bedrooms + factor(bathrooms) + factor(stories) + factor(driveway) + factor(recreation) + factor(fullbase) + factor(gasheat) + factor(aircon) + garage + factor(prefer), data = HousePrices,family = Gamma)
+summary(fitGammaAM)
+```
+
+
+### d. Issue the command gam.check(fitGammaAM) to check whether or not the residuals are consistent with the model assumptions
+
+```{r}
+mgcv::gam.check(fitGammaAM)
+
+```
+
+From the residuals vs linear pred. plot, it can be seen that there is almost no heteroskadasticity because the variance tends to remain mostly constant as we move towards the right.
+Histogram of residuals plot does not show skewness and seems much more like normal compared with the previous one.
+K-index < 1 for this model indicating that the value of k for s(lotsize) is perhaps low, but k-index is not too far from 1.0 (k-index=0.99). P-value is 0.5 which is higher than previous model.  
+
+
+## 2. For the AER data in Exercise 3.1, do the following: assume family=gaussian.
+
+### a. A stepwise regression using gam::gam
+
+```{r}
+#It appears that if you have been playing around with code, that has called mgcv, you have to detach the package, or use gam::gam
+if("package:mgcv" %in% search()) detach("package:mgcv", unload=TRUE)
+library(gam)
+# Fit using all the variables as linear terms. This serves as a baseline.
+# we do not use factor() on bedrooms and garage to match what is given in the textbook question 3.1a
+fitGamGaussAM = gam::gam(price ~ lotsize + bedrooms + factor(bathrooms) + factor(stories) + factor(driveway) + factor(recreation) + factor(fullbase) + factor(gasheat) + factor(aircon) + garage + factor(prefer), data = HousePrices,family = gaussian)
+summary(fitGamGaussAM)
+#provide splines for continuous variables
+StepfitGamGaussAM = step.Gam(fitGamGaussAM, scope=list(
+                             "lotsize" = ~1 + lotsize + s(lotsize, df=4)
+                             , "bedrooms" = ~1 + bedrooms
+                             , "bathrooms" = ~ 1 + factor(bathrooms) 
+                             , "stories" = ~ 1 + factor(stories)
+                             , "driveway" =  ~ 1 + factor(driveway)
+                             , "recreation" =  ~ 1 + factor(recreation)
+                             , "fullbase" = ~ 1 + factor(fullbase)
+                             , "gasheat" = ~ 1 + factor(gasheat)
+                             , "aircon" = ~ 1 + factor(aircon)
+                             , "garage" = ~ 1 + garage
+                             , "prefer" = ~ 1 + factor(prefer)
+                            ),data = HousePrices,family = gaussian
+                            )
+print("Final Model from step.Gam is: ")
+print(names(StepfitGamGaussAM$"model")[-1])
+```
+
+
+
+### b. A variable selection regression using mgcv::gam using the select=TRUE option.
+
+```{r}
+if("package:gam" %in% search()) detach("package:gam", unload=TRUE)
+library(mgcv)
+#From lecture notes, It looks like the select=TRUE option only penalizes spline terms
+# we try splines for continuous variables
+# we do not use factor() on bedrooms and garage to match what is given in the textbook question 3.1a
+MgcvfitGamGaussAM = mgcv::gam(price ~ s(lotsize) + bedrooms + factor(bathrooms) + factor(stories) + factor(driveway) + factor(recreation) + factor(fullbase) + factor(gasheat) + factor(aircon) + garage + factor(prefer), data = HousePrices,family = gaussian, select = TRUE)
+summary(MgcvfitGamGaussAM)
+plot(MgcvfitGamGaussAM)
+
+```
+
+### c. What variables overlap?
+
+  "s(lotsize)" "bedrooms" "factor(bathrooms)"  "factor(stories)"    "factor(driveway)"   "factor(recreation)" "factor(fullbase)"   "factor(gasheat)"   "factor(aircon)"     "garage"  "factor(prefer)" overlap. Both Step.Gam and mgcv::gam select spline for lotsize.
+  
+
+## 3.  Consider Exercise 3.3. You will be using the family=Gaussian command.
+ 
+### a. First install the package gss, then type library(gss); data(ozone); pairs(ozone); help(ozone). Describe what you get from doing this. “ppm” is parts per million.
+```{r}
+library(gss)
+data(ozone)
+pairs(ozone)
+help(ozone)
+```
+ 
+ This helps us to make the ozone data frame available to the current R session, visualize the data, and to show the variable names and their definitions.We see a matrix plot of scatterplots of different variable pairs.
+ 
+### b. The response is upo3: what is it?
+ 
+upo3 is "Upland ozone concentration, in ppm."
+
+ 
+### c. Do stepwise regression, including linear and spline forms for the continuous variables (which I think is all of them). What is the final model?
+ 
+```{r}
+#It appears that if you have been playing around with code, that has called mgcv, you have to detach the package, or use gam::gam
+if("package:mgcv" %in% search()) detach("package:mgcv", unload=TRUE)
+library(gam)
+# Fit using all the variables as linear terms. This serves as a baseline
+baselineFitOzoneGam = gam::gam(upo3 ~ ., data = ozone, family = gaussian)
+summary(baselineFitOzoneGam)
+#provide splines for continuous variables
+StepFitOzoneGam = step.Gam(baselineFitOzoneGam, scope=list(
+                             "vdht" = ~1 + vdht + s(vdht, df=4) 
+                             , "wdsp" = ~ 1 + wdsp + s(wdsp, df=4) 
+                             , "hmdt" = ~ 1 + hmdt + s(hmdt, df=4) 
+                             , "sbtp" =  ~ 1 + sbtp + s(sbtp, df=4)
+                             , "ibht" =  ~ 1 + ibht + s(ibht, df=4) 
+                             , "dgpg" = ~ 1 + dgpg + s(dgpg, df=4)
+                             , "ibtp" = ~ 1 + ibtp  + s(ibtp, df=4) 
+                             , "vsty" = ~ 1 + vsty + s(vsty, df=4)
+                             , "day" = ~ 1 + day + s(day, df=4) 
+                            ),data = ozone,family = gaussian
+                            )
+print("Final Model from Step.Gam is: ")
+print(names(StepFitOzoneGam$"model")[-1])
+```
+ 
+
+### d. Now detach gam::gam and use using mgcv::gam to refit your model chosen in part c.
+```{r}
+if("package:gam" %in% search()) detach("package:gam", unload=TRUE)
+library(mgcv)
+MgcvFitOzoneFromStepWise = mgcv::gam(upo3 ~ vdht + wdsp + hmdt + s(sbtp) + s(dgpg) + ibtp  + s(vsty) + s(day), data=ozone, family = gaussian)
+```
+
+### e. Obtain numerical summaries from part d and interpret them
+
+```{r}
+summary(MgcvFitOzoneFromStepWise)
+
+```
+All spline terms are highly statistically significant at 0.05.
+Linear terms are highly statistically significant at 0.05.
+
+
+### f. Now use the select=TRUE option and see what their final model is
+
+```{r}
+if("package:gam" %in% search()) detach("package:gam", unload=TRUE)
+library(mgcv)
+#From lecture notes, It looks like the select=TRUE option only penalizes spline terms
+# we try splines for continuous variables
+MgcvFitOzoneGam = mgcv::gam( upo3 ~ s(vdht) + s(wdsp) + s(hmdt) + s(sbtp) + s(ibht) + s(dgpg) + s(ibtp) + s(vsty) + s(day), data=ozone,   family = gaussian, select = TRUE)
+summary(MgcvFitOzoneGam)
+plot(MgcvFitOzoneGam)
+```
+
+### g. Compare the two final models from stepwise regression and the mgcv method.
+
+For mgcv with select=true, "wdsp", "hmdt", "ibht", "ibpt" look close to horizontal in the plots and "vdht" looks linear too.  s(ibht) and s(ibtp) are not statistically significant at 0.05 level.
+
+step.Gam selects "vdht", "wdsp", "hmdt", "s(sbtp, df = 4)", "s(dgpg, df = 4)", "ibtp", "s(vsty, df = 4)", "s(day, df = 4)"  . It did not select ibht which wasn't statistically significant for mgcv::gam. For step.Gam model, all terms were significant at 0.05 level.
+
+### h. Do model selection using gamsel, if possible. Compare that model to the other selected models.
+
+```{r}
+library(gamsel)
+upo3 <- ozone$upo3
+X <- data.frame(ozone$vdht,ozone$wdsp,
+                ozone$hmdt,ozone$sbtp,
+                ozone$ibht,ozone$dgpg,
+                ozone$ibtp, ozone$vsty,
+                ozone$day)
+fitCVgamsel <- cv.gamsel(X,y = upo3, family = c("gaussian"))
+print(fitCVgamsel$gamsel.fit)
+par(mfrow=c(1,1))
+plot(fitCVgamsel)
+#best model
+fitCVgamsel$index.1se
+par(mfrow = c(3,3))
+for (iPred in 1:9){
+  plot(fitCVgamsel$gamsel.fit,newx = X,which = iPred,
+       index = fitCVgamsel$index.1se,col.main = "navy",
+       main = names(X)[iPred],rugplot = TRUE,bty = "l")}
+
+```
+
+gamsel selects all variables. vdht, wdsp, hmdt and ibht are linear while others are non linear. In step.Gam, the linear terms were vdht, wdsp, hmdt and ibtp. Step.Gam did not select ibht. Mgcv:: gam had "wdsp", "hmdt", "ibht", "ibpt" looking close to horizontal in the plots and "vdht" looking linear too. 
+
+We build a mgcv::gam model using the selection from gamsel and check the summary.
+
+```{r}
+if("package:gam" %in% search()) detach("package:gam", unload=TRUE)
+library(mgcv)
+MgcvFitOzoneFromGamsel = mgcv::gam(upo3 ~ vdht + wdsp + hmdt + s(sbtp) + ibht + s(dgpg) + ibtp  + s(vsty) + s(day), data=ozone, family = gaussian)
+summary(MgcvFitOzoneFromGamsel)
+```
+ibht and ibtp are not statistically significant at 0.05 level in the above summary. All other predictors are statistically significant at 0.05 level. For mgcv with select=true, s(ibht) and s(ibtp) are not statistically significant at 0.05 level. This matches with what is seen in the gamsel model.
+Step.Gam did not select ibht but all other terms were statistically significant at 0.05 level. 
+
+## 4. Consider Exercise 3.4. You will be using the family=logistic command.
+
+### a. Issue the following commands to load and obtain a listing of the variables in the data frame icu: > library(aplore3) ; data(icu) ; help(icu) The data frame consists of 21 variables for 200 patients admitted to an intensive care unit (ICU).
+```{r}
+library(aplore3)
+data(icu)
+help(icu)
+```
+
+### b. Use the function step.Gam() in the gam package to select a logistic GAM with the response variable being the indicator of the patient dying.
+```{r}
+icu$live <- ifelse(icu$sta=="Lived", 1, 0)
+#It appears that if you have been playing around with code, that has called mgcv, you have to detach the package, or use gam::gam
+if("package:mgcv" %in% search()) detach("package:mgcv", unload=TRUE)
+library(gam)
+#do not use splines for continuous terms in baseline
+icubaselinegam = gam::gam(live ~ age + factor(gender) + factor(race) + factor(ser) + 
+                            factor(can) + factor(crn) + factor(inf) + factor(cpr) + sys + hra + 
+                            factor(pre)  + factor(type) + factor(fra) + factor(po2) + factor(ph) + factor(pco) + factor(bic) + factor(cre) 
+                          + factor(loc), data=icu, family=binomial(link="logit"))
+stepicugam = gam::step.Gam(icubaselinegam, scope=
+                          list("age" = ~ 1 + age + s(age, 2) 
+                               ,"age" = ~ 1 + age + s(age, 3)
+                               ,"age" = ~ 1 + age + s(age, 4)
+                               , "gender" = ~ 1 + factor(gender)
+                               , "race" = ~1 + factor(race)
+                               , "ser" = ~ 1 + factor(ser)
+                               , "can" = ~ 1 + factor(can)
+                               , "crn" = ~ 1 + factor(crn)
+                               , "inf" = ~ 1 + factor(inf)
+                               , "cpr" = ~ 1 + factor(cpr)
+                               , "sys" = ~ 1 + sys + s(sys, 2)
+                               , "sys" = ~ 1 + sys + s(sys, 3)
+                               , "sys" = ~ 1 + sys + s(sys, 4)
+                               , "hra" = ~ 1 + hra + s(hra, 2)
+                               , "hra" = ~ 1 + hra + s(hra, 3)
+                               , "hra" = ~ 1 + hra + s(hra, 4)
+                               , "pre" = ~ 1 + factor(pre)
+                               , "type" = ~ 1 + factor(type)
+                               , "fra" = ~ 1 + factor(fra) 
+                               , "po2" = ~ 1 +factor(po2) 
+                               , "ph" = ~ 1 + factor(ph)
+                               , "pco" = ~ 1 + factor(pco) 
+                               , "bic" = ~ 1 + factor(bic) 
+                               , "cre" = ~ 1 + factor(cre) 
+                               , "loc" = ~ 1 + factor(loc)
+                               ) 
+                           , data=icu, family=binomial(link="logit")
+                           )
+#print final model
+print("Final model is: ")
+print(names(stepicugam$"model")[-1])
+```
+
+### c. Use the function gam() in the mgcv package to re-fit the model selected in part b. with GCV used for selection of the smoothing parameters of the penalized spline components of the model. Obtain numerical and graphical summaries of the selected model.
+
+```{r}
+if("package:gam" %in% search()) detach("package:gam", unload=TRUE)
+library(mgcv)
+mgcvicugamstep = mgcv::gam(live ~ s(age) + factor(gender) + factor(can) + factor(cpr) + sys + factor(pre) + factor(type) + factor(ph) + factor(pco) + factor(loc), data=icu, family=binomial(link="logit"))
+summary(mgcvicugamstep)
+plot(mgcvicugamstep)
+```
+
+### d. Consider a 79-year-old white woman who enters the ICU as an emergency patient in a coma. The woman has no history of previous ICU admission, cancer, chronic renal failure, and is free of infection at the time of admission. Cardiopulmonary resuscitation is not needed and she has no fractures. Finally, at the time of admission she has the following medical measurements (given in code). Estimate the woman’s survival probability.
+
+```{r}
+new_patient = data.frame(
+    age=79
+    , gender="Female"
+    , race="White"
+    , ser="Medical"
+    , can="No"
+    , crn="No"
+    , inf="No"
+    , cpr="No"
+    , sys=228
+    , hra=94
+    , pre="No"
+    , type="Emergency"
+    , fra="No"
+    , po2="<= 60"
+    , ph=">= 7.25"
+    , pco="> 45"
+    , bic="< 18"
+    , cre="> 2.0"
+    , loc="Coma"
+)
+new_patient_pred <- mgcv::predict.gam(mgcvicugamstep, newdata=new_patient, type="response")
+print("survival probability of the woman given by:")
+print(new_patient_pred)
+```
+
+### e. Use the select=TRUE option in mgcv::gam to do model selection. Compare the model with that in 4b above. Comment on what happens.
+```{r}
+#From lecture notes, It looks like the select=TRUE option only penalizes spline terms
+mgcvicuselect =  mgcv::gam(live ~ s(age) + factor(gender) + factor(race) + factor(ser) + 
+                            factor(can) + factor(crn) + factor(inf) + factor(cpr) + s(sys) + s(hra) + 
+                            factor(pre)  + factor(type) + factor(fra) + factor(po2) + factor(ph) + factor(pco) + factor(bic) + factor(cre) 
+                          + factor(loc), data=icu, family=binomial(link="logit"), select = TRUE)
+summary(mgcvicuselect)
+plot(mgcvicuselect)
+```
+
+mgcv::gam with select=true does not select hra like step.Gam (see the horizontal line in the hra plot, it 'shrinks' to zero) but it selects age and sys splines as per the plots. In the model selected by mgcv::gam,  s(sys) is not statistically significant at 0.05 level whereas sys was statistically significant for the model selected by step.Gam at level 0.05. mgcv::gam does not do penalization on linear terms. 
