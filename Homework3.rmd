@@ -1,0 +1,104 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The point of this is to bring home to you the worthlessness of polynomial
+regression when you have splines that are easily programmed. 
+
+### 1. Read fossil data
+
+```{r}
+fossil = read.csv("fossil.csv")
+head(fossil)
+```
+
+### 2. Do a scatterplot of the data, with X = age. As seen near the end of Lecture 1, it is distinctly not linear, and hence a perfect example for semiparametric regression.
+
+```{r fossil}
+plot(fossil$Age, fossil$Strontium.Ratio
+     , main="Strontium ratio vs. Age"
+     , xlab="Age"
+     , ylab="Strontium Ratio")
+
+```
+
+### 3. Fit a linear model and add the fit to the scatterplot
+```{r}
+lin_mod = lm(Strontium.Ratio ~ Age, data = fossil)
+summary(lin_mod)
+```
+```{r}
+plot(fossil$Age, fossil$Strontium.Ratio
+     , main="Strontium ratio vs. Age"
+     , xlab="Age"
+     , ylab="Strontium Ratio")
+abline(lin_mod)
+```
+
+This model does not fit well as can be seen in the above graph. Age is not statistically significant
+at 0.05.
+
+### 4. Fit a quadratic model and add the fit to the scatterplot of the raw data. Does this help? Why or why not?
+```{r}
+quad_mod <- lm(Strontium.Ratio ~ Age + I(Age^2)
+               ,data=fossil)
+summary(quad_mod)
+```
+```{r}
+plot(fossil$Age, fossil$Strontium.Ratio
+     , main="Strontium ratio vs. Age"
+     , xlab="Age"
+     , ylab="Strontium Ratio")
+#use model to get predicted values
+pred <- predict(quad_mod)
+ix <- sort(fossil$Age, index.return=T)$ix
+
+#add polynomial curve to plot
+lines(fossil$Age[ix], pred[ix],lwd=2)
+```
+
+All coefficients are statistically significant at 0.05 but the fitted line is not flexible enough to fit the data as can be seen in the above graph. This is not a good fit.
+
+### 5. Fit a cubic model and add the fit to the scatterplot of the raw data. Does this help? Why or why not?
+```{r}
+cubic_mod <- lm(Strontium.Ratio ~ Age + I(Age^2) + I(Age^3)
+               ,data=fossil)
+summary(cubic_mod)
+```
+```{r}
+plot(fossil$Age, fossil$Strontium.Ratio
+     , main="Strontium ratio vs. Age"
+     , xlab="Age"
+     , ylab="Strontium Ratio")
+#use model to get predicted values
+pred <- predict(cubic_mod)
+ix <- sort(fossil$Age, index.return=T)$ix
+
+#add polynomial curve to plot
+lines(fossil$Age[ix], pred[ix],lwd=2)
+```
+
+Coefficients are statistically significant and the cubic model fits much better than quadratic  in the above graph, but there are still some points that it does not fit well as seen in the above graph. 
+
+### 6. Fit a quartic model and add the fit to the scatterplot of the raw data. Does this help? Why or why not?
+```{r}
+quartic_mod <- lm(Strontium.Ratio ~ Age + I(Age^2) + I(Age^3) + I(Age^4)
+               ,data=fossil)
+summary(quartic_mod)
+```
+```{r}
+plot(fossil$Age, fossil$Strontium.Ratio
+     , main="Strontium ratio vs. Age"
+     , xlab="Age"
+     , ylab="Strontium Ratio")
+#use model to get predicted values
+pred <- predict(quartic_mod)
+#get sorted indices
+ix <- sort(fossil$Age, index.return=T)$ix
+
+#add polynomial curve to plot
+lines(fossil$Age[ix], pred[ix],lwd=2)
+```
+
+This looks better than quadratic and linear but looks similar to the cubic model in terms of fit. In other words, quartic does not lead to much improvement over cubic. Quartic model gets us more complexity but less significance compared to the cubic model as per the model summary output. 
+
