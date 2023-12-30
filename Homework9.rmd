@@ -1,0 +1,111 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# STAT 689 Homework 9
+## Rohan Tiwari
+
+This is an open-ended question but based on the ragweed data, Exercise 11 in Chapter 3. You may have to consult the book carefully to do the exercise. The response is the pollen count. The idea of the square root transformation of the pollen count is based on the well-known result that if the Poisson counts are pretty common, their square root is approximately normally distributed and with approximately constant variance. This arises from a delta-method calculation.
+The place of this study is Kalamazoo, MI. It used to be a nice town but appears to have fallen on hard times. Western Michigan University is based there.
+
+### 1. Work Exercise 3.11.a.
+
+```{r}
+library(HRW)
+data(ragweed)
+help(ragweed)
+```
+
+### 2. Use the model in Exercise 3.11.b, but fit a quasiPoisson model with scale = -1, family=quasipoisson. Based on the estimated scale (= c^2 of the lectures), might there be concern about overdisperson? Why or why not? The base model is
+fit1 <- gam(pollenCount ~ factor(year)
++ s(dayInSeason,k = 27,by = factor(year))
++ temperatureResidual + rain + s(windSpeed,k = 27),
+data = ragweed,family = quasipoisson,scale=-1)
+
+```{r}
+fit1 <- mgcv::gam(pollenCount ~ factor(year)
++ s(dayInSeason,k = 27,by = factor(year))
++ temperatureResidual + rain + s(windSpeed,k = 27),
+data = ragweed,family = quasipoisson,scale=-1)
+summary(fit1)
+```
+The scale estimate is 8.5443 which is greater than 1 or it is not close to 1. Therefore, as per lecture slides, we have over dispersion.
+
+
+### 3. Now take the square root transformation of the response, and pretending that the well-known theory is correct, check to see whether the idea of constant variance after the square root transformation is reasonable in this example
+
+### 3a. This means first to fit the model above, with the response being the square root of the pollen counts, but with no scale and family=gaussian
+
+```{r}
+fit2 <- mgcv::gam(sqrt(pollenCount) ~ factor(year)
++ s(dayInSeason,k = 27,by = factor(year))
++ temperatureResidual + rain + s(windSpeed,k = 27),
+data = ragweed,family = gaussian)
+summary(fit2)
+```
+
+### 3b. Create the residuals from your fit. Call them R.
+```{r}
+r = residuals(fit2)
+```
+
+### 3c. Create the absolute values of the residuals from your fit, i.e., abs(R). Called them A.
+
+```{r}
+a = abs(r)
+```
+
+### 3d. Regress A on the same model as in question 3.a. Get the fitted values and call them F.
+
+```{r}
+fit3 = mgcv::gam(a ~ factor(year)
++ s(dayInSeason,k = 27,by = factor(year))
++ temperatureResidual + rain + s(windSpeed,k = 27),
+data = ragweed,family = gaussian)
+
+f = fitted(fit3)
+```
+
+### 3e. Regress the absolute residuals A on F as in a simple linear regression. Plot the fitted model
+```{r}
+fit4 = lm(a ~ f)
+ord <- order(f)
+plot(f[ord], a[ord]
+     , main="Fitted model"
+     , xlab="Fitted Values"
+     , ylab="Abs. Residuals"
+     )
+# plot the model
+lines(f[ord], fitted(fit4)[ord], lwd=3)
+```
+
+
+
+### 3f. Do you see evidence of severe heteroscedasticity in that plot?
+Variance of abs. residuals greatly increases as we move towards the right; their variance is not constant so we have severe heterscedasticity.
+
+
+### 4. Using the square root transformation of pollen counts as the response as in question 3, replace the statement s(dayInSeason,k = 27,by = factor(year)) by s(dayInSeason,k = 27), i.e., remove the interaction from the model with the square root transformation. Do a stepwise regression using gam in the gam package, i.e., gam::step.Gam. Make sure that that you have detached the mgcv package first. What model is selected?
+
+```{r}
+#It appears that if you have been playing around with code, that has called mgcv, you have to detach the package, or use gam::gam
+if("package:mgcv" %in% search()) detach("package:mgcv", unload=TRUE)
+library(gam)
+fit5 <- gam::gam(sqrt(pollenCount) ~ factor(year)
++ dayInSeason + temperatureResidual + rain + windSpeed,
+data = ragweed,family = gaussian)
+summary(fit5)
+
+fit5stepwise = gam::step.Gam(fit5, scope = 
+                               list("year" = ~1 + factor(year)
+                                    ,"dayInSeason" = ~1 +  dayInSeason + s(dayInSeason, 4) 
+                                    , "temperatureResidual" = ~1 + temperatureResidual  + s(temperatureResidual, 4) 
+                                    , "rain" = ~1 + rain
+                                    , "windSpeed" = ~1 + windSpeed + s(windSpeed, 4))
+                             , data = ragweed,family = gaussian)
+#print final model
+print(names(fit5stepwise$"model")[-1])
+```
+Model selected is
+[1] "factor(year)"        "s(dayInSeason, 4)"   "temperatureResidual" "rain"               
+[5] "windSpeed"      

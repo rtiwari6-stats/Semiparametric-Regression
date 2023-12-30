@@ -1,0 +1,154 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# STAT 689 Homework 12
+## Rohan Tiwari
+
+Consult the directory OPEN Data, and get the files OPEN_sim.csv and OPEN_README.pdf. The README file will tell you about the data, so look at it carefully for definitions. You will be comparing different estimates of the percentage of calories from protein (%CFP) for women.
+
+```{r}
+opendata = read.csv("OPEN_sim_2019.csv")
+head(opendata)
+```
+
+### 1. Compare the true %CFP to the average %CFP estimated by each instrument (AvgFFQ, AvgRecall, and AvgBio). Make a boxplot comparing the three instruments, where you take their differences with the truth. Describe why you think one of the instruments is best.
+
+```{r}
+truth = opendata$Truth
+ffq = opendata$FFQ
+recall = opendata$Recall
+bio = opendata$Bio
+
+ffq_error = truth - ffq
+recall_error = truth - recall
+bio_error = truth - bio
+
+boxplot(ffq_error, recall_error, bio_error
+        , names = c("FFQ", "Recall", "Bio")
+        , xlab="Instrument"
+        , ylab="Error"
+        , main="Box Plot for the Three Instruments"
+        )
+
+```
+
+Bio seems to be the best instrument because it has the lowest variance which makes it more reliable compared to other instruments.
+
+### 2. Fit a random intercept spline model with the response being the biomarker (Bio in the data set), and the predictors being the FFQ and the 24HR, both modeled as splines.
+
+```{r}
+library(gamm4)
+fit_gamm4 = gamm4(bio ~ s(ffq) + s(recall), random= ~(1|ID), data=opendata)
+```
+
+### 2a. Display the summaries of the fit. Tell us which, if any, is a statistically significant predictor of the biomarker.
+
+```{r}
+summary(fit_gamm4$gam)
+```
+
+Based on the summaries, it looks like s(ffq) is statistically significant predictor of bio.
+
+### 3. What are the between and within standard deviations of the fit? This is a single fit.
+```{r}
+summary(fit_gamm4$mer)
+```
+the between group std.dev is 3.625  and within group std.dev is 6.160.
+
+
+### 4. Display the fitted curves for both the FFQ and the 24HR in one graph. I suggest that you set up a grid of %CFP as your x-values and use that grid when predicting responses from your model.
+
+```{r}
+ng <- 101
+
+#vary ffq
+cfpg <- seq(from=min(opendata$Truth), to=max(opendata$Truth),length=ng)
+#fix recall to average
+recallg = rep(mean(opendata$Recall), ng)
+
+newDF <- data.frame(ffq  = cfpg, recall = recallg)
+predObj_one <- predict(fit_gamm4$gam, newDF, se=T)
+lowdirg_one <- predObj_one$fit - qnorm(0.975)*predObj_one$se.fit
+uppdirg_one <- predObj_one$fit + qnorm(0.975)*predObj_one$se.fit
+
+plot(0,type="n",xlab = "%CFP (truth)",
+     ylab = "Fitted values",main = "fitted curves for ffq and recall",
+     xlim = c(min(cfpg),max(cfpg)),
+     ylim = c(min(lowdirg_one),max(lowdirg_one)))
+polygon(c(cfpg, rev(cfpg)), c(lowdirg_one, rev(uppdirg_one))
+         , border=T
+         , lty=2
+         , lwd=2
+        )
+lines(cfpg, predObj_one$fit, col="black", lty=2, lwd=2)
+
+#vary recall
+recallg <- seq(from=min(opendata$Truth), to=max(opendata$Truth),length=ng)
+#fix ffq to average
+ffqg = rep(mean(opendata$FFQ), ng)
+newDataDF_two <- data.frame(ffq  = ffqg, recall = recallg)
+predObj_two <- predict(fit_gamm4$gam, newDataDF_two, se=T)
+lowdirg_two <- predObj_two$fit - qnorm(0.975)*predObj_two$se.fit
+uppdirg_two <- predObj_two$fit + qnorm(0.975)*predObj_two$se.fit
+polygon(c(cfpg, rev(cfpg)), c(lowdirg_two, rev(uppdirg_two))
+        , border=T
+        , lwd=2
+)
+lines(recallg, predObj_two$fit, col="black", lwd=2)
+legend("bottomright", c("FFQ", "24hr Recall"), lty=c(2,1), lwd=c(2,2))
+```
+
+### 5. In the model from question (2), add Age and BMI as linear predictors. Which are these two are statistically significant?
+
+```{r}
+fit_gamm4_1 = gamm4(bio ~ s(ffq) + s(recall) + Age + BMI, random= ~(1|ID), data=opendata)
+summary(fit_gamm4_1$gam)
+```
+
+s(ffq) and BMI are statistically significant. 
+
+
+### 6. In these data, see if the biomarker (not the truth) needs a random function model or a random intercept model.
+### 6a. Of course, you can test this in gamm4.
+```{r}
+# Now run the random functions analysis, but 
+# in gamm4::gamm4
+#On canvas, professor said "Pick either the recall or the ffq as the covariate: not both".
+# we will pick ffq
+fit_gamm4_ffq = gamm4(bio ~ s(ffq), random= ~(1|ID), data=opendata)
+fit_gamm4_rf = gamm4::gamm4(bio ~ 
+               + s(I(ffq), k=7) + s(I(ffq), ID, k=5, xt=list(bs="cr"))
+               ,data=opendata)
+print(summary(fit_gamm4_rf$gam)$s.table, signif.stars = FALSE)
+
+# In gamm4:gamm4, test whether the random functions
+# are needed
+print(anova(fit_gamm4_ffq$mer, fit_gamm4_rf$mer), signif.stars = FALSE)
+```
+Based on the anova results, we do not need a random function for these data
+
+### 6b. However, let’s pretend you need to convince people that this is true. How about some plots?
+
+```{r}
+###################################################
+# Plot individual random functions
+###################################################
+# pdf("Indiana_Random_Function_Plots.pdf")
+# jpeg("Indiana_Random_Function_Plots.jpg")
+random_Function_Plots = fit_gamm4_rf$gam$fitted.values
+n = length(unique(opendata$ID))
+ccc = colors()
+for (ii in 1:n){
+  ffq1 = ffq[opendata$ID == ii]
+  random_Function_Plots1 = fit_gamm4_rf$gam$fitted.values[opendata$ID == ii]
+  if (ii == 1){
+    plot(ffq1,random_Function_Plots1,type="n",xlab="ffq",ylab="Individual Fits",
+         main="Open Data, Random Functions")
+  }
+lines(ffq1,random_Function_Plots1,col=ccc[20+ii],lwd=2)
+}
+
+
+```
+

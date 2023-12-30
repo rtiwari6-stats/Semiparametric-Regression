@@ -1,0 +1,263 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# STAT 689 Homework 11
+## Rohan Tiwari
+
+### This concerns the pig weight data. When fitting a spline, please use k = 4 or k = 3.
+
+```{r}
+library(HRW)
+library(gamm4)
+setwd("~/tamu/MS-STAT-2022/689-flexible-regression")
+pigs = read.csv(file="pigWeights.csv")
+```
+
+### 1. Consider the pig weight data. Use the program Indiana_BLUP.R, as a guide. However, set numIntKnotsGbl = 6 and numIntKnotsGrp = 3
+
+### 1a. How many pigs are in the model?
+```{r}
+# Number of subjects
+numGrp = length(unique(pigs$id.num))
+cat('Number of pigs is:', numGrp)
+```
+
+### 1b. Using native code, as in the program, fit the random function model, and display summary statistics from that fit
+
+```{r}
+weight = pigs$weight
+num.weeks = pigs$num.weeks
+# Get ID numbers that are consecutive from 
+# 1 to n. I have no idea why you need to do this
+###################################################
+#idnumBM = rep(NA,length(pigs$id.num))
+# Ids are sequential
+idnumBM = pigs$id.num
+# Total number of observations
+numObs = length(pigs$id.num)
+# Number of knots at the population level
+numIntKnotsGbl = 6
+# O'Sullivan Basis Functions at the population level
+intKnotsGbl = quantile(unique(num.weeks),
+                       seq(0,1,length=numIntKnotsGbl+2))[-c(1,numIntKnotsGbl+2)]
+range.num_weeks = c(5.5,20)
+range.num_weeks = c(min(num.weeks)-0.01, max(num.weeks)+0.01)
+Zgbl = ZOSull(num.weeks,range.x=range.num_weeks,intKnots=intKnotsGbl)
+# Number of knots at the subject level. Should be less than the
+# number of knots at the population level
+numIntKnotsGrp = 3	
+# Basis functions for O'Sullivan splines at the 
+# individual level
+intKnotsGrp = quantile(unique(num.weeks),
+                       seq(0,1,length=numIntKnotsGrp+2))[-c(1,numIntKnotsGrp+2)]
+Zgrp = ZOSull(num.weeks,range.x=range.num_weeks,intKnots=intKnotsGrp)
+##################################################################### 
+# Set up the random effects structure and call lme
+#
+# See Lecture 18 for the explanation
+##################################################################### 
+#
+dummyId = factor(rep(1,numObs))
+Zblock   = list(dummyId = pdIdent( ~ -1 + Zgbl),
+               idnumBM = pdSymm( ~ num.weeks),
+               idnumBM = pdIdent( ~ -1 + Zgrp))
+
+blkMalGD = groupedData(weight ~ num.weeks|rep(1,length = numObs),
+                        data = data.frame(weight,num.weeks,Zgbl,Zgrp,idnumBM))
+fit      = lme(weight ~ num.weeks,data = blkMalGD,random = Zblock)
+##################################################################### 
+# Get the summary
+summary(fit)
+```
+
+### 1c. Plot the population mean function
+```{r}
+##################################################################### 
+# Now we are going to get BLUPs and plot functions
+# I will comment on most of the code
+##################################################################### 
+# Size of grid on which to do the plotting
+ng = 101
+# Get the grid of ages
+ageg = seq(range.num_weeks[1],range.num_weeks[2],length = ng)
+# Form the design matrix for the linear part, which is a column
+# of ones plus the grid of ages
+Xg = cbind(rep(1,ng),ageg)
+# Spline terms for the overall fit
+Zgblg = ZOSull(ageg,range.x = range.num_weeks,
+                intKnots = intKnotsGbl)
+# Spline terms for the individual fits
+Zgrpg = ZOSull(ageg,range.x = range.num_weeks,
+                intKnots = intKnotsGrp)
+# Get betahat, the intercept and the slope
+betaHat = as.vector(fit$coef$fixed)
+# Get uHat, the estimated spline coefficients for the
+# overall fit
+uHat = as.vector(fit$coef$random[[1]])
+# Form the overall fit
+fHatg = as.vector(Xg%*%betaHat + Zgblg%*%uHat)
+# Now get the subject-specific estimated curves
+curvEsts = vector("list",numGrp)
+for (i in 1:numGrp)
+{
+  # T^he subject-specific terms for the slope
+  # and intercept
+  uLinHati = as.vector(fit$coef$random[[2]][i,])
+  # The subject-specific terms for the spline coefficients
+  uSplHati = as.vector(fit$coef$random[[3]][i,])
+  # The individual function estimates
+  ghati = Xg%*%uLinHati + Zgrpg%*%uSplHati
+  curvEsts[[i]] = fHatg + ghati
+}
+plot(ageg,fHatg,type='l',lwd=3,col="blue",
+     xlab="num_weeks",ylab="Weight",
+     main="Pig Weight mean function")
+```
+
+### 1d. Plot the individual function fits for the first 8 pigs.
+```{r}
+library(lattice)
+
+figBlkMalFit = xyplot(weight ~ num.weeks|idnumBM[idnumBM %in% 1:8],groups = idnumBM[idnumBM %in% 1:8],
+                       data = pigs,
+                       strip = FALSE,scales = list(cex = 1.25),
+                       xlab = list("num.weeks",cex = 1.5),
+                       ylab = list("weight",cex = 1.5),
+                       as.table = TRUE,#layout = c(4,7),
+                       panel = function(x,y,subscripts,groups)
+                       {  
+                         panel.grid()
+                         adolNum = idnumBM[subscripts][1]
+                         panel.superpose(x,y,subscripts,groups,
+                                         col = "dodgerblue",type = "b")
+                         panel.xyplot(ageg,curvEsts[[adolNum]],
+                                      col = "blue",type = "l")
+                       })
+#pdf('BLUP_Fits_At_the_Individual_Level.pdf')
+plot(figBlkMalFit)
+```
+
+### 1e. Fit the random function (not random intercept) model using gamm4::gamm4. How does this compare to your answer in (b) above. Please be short: I do not mean this as a big deal
+
+```{r}
+fit_gamm =  gamm4::gamm4(weight ~ 
+                            s(I(num.weeks), k=7, bs="cr")
+                         + s(I(num.weeks), as.factor(id.num), k=5, bs="fs", 
+                             xt=list(bs="cr")),data=pigs)
+summary(fit_gamm$mer)
+```
+Residual std.dev for native and gamma4 is slightly different (almost same). The sigma_grp std.dev is much different for gamm4 and native code. 
+
+
+### 2. Run a random intercept model on these data. I think you can get the answers I want using either mgcv::gamm or gamm4::gamm4. I believe that the between-subject variability for weeks 1-5 is smaller than that for weeks 6-9. Run the random intercept model separately for these two time periods and see if you agree with me. You are likely to have more luck on this with mgcv::gamm, and you may need to set k = 3 to get an answer.
+
+```{r}
+pigs1_5 = pigs[(pigs$num.weeks <=5),]
+pigs6_9 = pigs[(pigs$num.weeks >= 6),]
+
+fitpigs1_5 = gamm4(weight ~ s(I(num.weeks),k=4,bs="cr"),
+             random= ~(1|id.num),data = pigs1_5)
+fitpigs6_9 = gamm4(weight ~ s(I(num.weeks),k=4,bs="cr"),
+             random= ~(1|id.num),data = pigs6_9)
+
+```
+
+### 2a. Show you results (not the plots).
+```{r}
+summary(fitpigs1_5$mer)
+summary(fitpigs6_9$mer)
+```
+We see that group 6-9 has higher between-subject variability of 2.401 compared to 1.95979 for group 1-5.
+
+### Please make sure to look at Wood_Example.R in the Cox_Regression folder within Data_Sets. 
+
+The data set Stat689_homework11_Actual.csv within the folder Homework11 has the following variables;
+colon_cc: = 0 if the person does not develop colon cancer, i.e., is censored. = 1 otherwise
+nonsmoker: = 1 if the person is a nonsmoker, = 0 if they smoke. age: Self-explanatory. bmi: Self-explanatory. personyrs: Time since being diagnosed with colon cancer.
+
+All problems assume that the binary variable zz$nonsmoker is in the model.
+```{r}
+colonCancer = read.csv(file="Stat689_homework11_Actual.csv")
+head(colonCancer)
+
+```
+
+### 3. In the original data set, which for want of imagination I call zz, there were a number of subjects with column 4 = 0, or bmi = 0. I changed all these to NA by the command is.na(zz[,4]) = !zz[,4]. Like the trained monkey I am in R, I just looked this up.
+
+```{r}
+is.na(colonCancer[,4]) = !colonCancer[,4]
+```
+
+### 4. Now delete all subjects that have any missing data. You might look up na.omit. How many subjects are left?
+```{r}
+colonCancer = na.omit(colonCancer)
+cat('Number of subjects left:', nrow(colonCancer))
+```
+
+### 5. What percentage developed colon cancer?
+```{r}
+pctcc = 100*sum(colonCancer$colon_cc) / nrow(colonCancer)
+cat('% developed colon cancer is:', pctcc)
+```
+
+### 6. Run a Cox regression with age and bmi entering linearly. Show the output.
+
+```{r}
+ccfitLinear = gam(personyrs ~ age + bmi + nonsmoker, 
+                    weights = colon_cc , 
+                    family = cox.ph , data = colonCancer)
+summary(ccfitLinear)
+```
+### 7. Describe the results in problem 1, using statistical significance. Remember, negative values of a coefficient for zz$nonsmoker means that nonsmokers are less likely to develop colon cancer.
+
+Age is highly significant. The coefficient estimate is positive (0.050469). The risk of colon cancer increases with age on an average. 
+bmi is highly significant. The coefficient estimate is positive (0.026121). The risk of colon cancer increases with bmi on an average. 
+nonsmoker is highly significant. The coefficient estimate is negative (-0.178054). The risk of colon cancer is higher for smoker than nonsmoker.
+
+###  8. Now run a Cox regression with age and bmi entering as smooths. Show your output.
+```{r}
+ccfitgam = gam(personyrs ~ s(age) + s(bmi) + nonsmoker 
+                 , weights = colon_cc , family = cox.ph , data = colonCancer)
+summary(ccfitgam)
+```
+### 9. What is statistically significant?
+Splines on age and bmi are statistically significant. Also, nonsmoker is statistically significant.
+
+### 10. Try to compare the models in Problems 4 and 5 using your favorite method. See my caveat below.
+```{r}
+anova(ccfitLinear, ccfitgam , test = "Chisq")
+```
+Spline model is significant so smoothing the terms is a good idea but if we consider significance at 0.05 that spline model is not significant and smoothing terms is not a good idea.
+
+### 11. Pick a single person and plot his/her survival curves and pointwise confidence intervals for the model in question 8.
+```{r}
+# What subject are you interested in 
+# Set subject number
+#pdf("Survival_Probabilities_Subject_66.pdf")
+subjectnum = 1
+par(mfrow=c(1,1))
+# Number of time point in the grid
+np = 300
+# Get the data frame for your chosen subject
+newd = data.frame(matrix(0,np,0))
+for (n in names(colonCancer)){ 
+  newd[[n]] = rep(colonCancer[[n]][subjectnum],np)
+}
+newd$personyrs <- seq(0, 12, length=np)
+## predict and plot the survival function...
+fv = predict(ccfitgam,newdata=newd,type="response",se=TRUE)
+plot(newd$personyrs,fv$fit,type="l", xlim=c(0, 12), ylim=c(0, 1),xlab="personyrs",
+     ylab="survival",lwd=2,col="blue",
+     main = substitute(paste("Subject = ",m),list(m = subjectnum)))
+## Add intervals based on cumulative hazard s.e...
+# This appears to be correct, but involves heavy theory
+se = fv$se.fit/fv$fit
+lines(newd$personyrs,exp(log(fv$fit)+2*se),col="red4",lwd=2)
+lines(newd$personyrs,exp(log(fv$fit)-2*se),col="red4",lwd=2)
+```
+
+
+
+
+

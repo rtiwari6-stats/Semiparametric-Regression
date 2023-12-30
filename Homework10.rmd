@@ -1,0 +1,128 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# STAT 689 Homework 10
+## Rohan Tiwari
+
+### 1. We have talked about the spinal bone mineral density data, with the random intercept case. I stated that I think, or perhaps hope, that the id numbers should not have to be 1,2,3… I also think/hope that the idnumbers do not need to be ordered. It is generally the case that data sets are “cleaned” and there is a code book that converts the actual ids to 1,2,3,…,n. This helps de-identify data and helps preserve anonymity.
+
+### 1a. Test this out in the spinal bone mineral density data, by defining a new variable, femSBMD$idnum2 = 2 * femSBMD$idnum
+
+```{r}
+library(HRW)
+library(gamm4)
+setwd("~/tamu/MS-STAT-2022/689-flexible-regression")
+femSBMD = read.csv("femSBMD.csv")
+femSBMD$idnum2 = 2*femSBMD$idnum
+head(femSBMD)
+```
+
+### 1b. Then rerun the gamm4::gamm4 given in class to see if you get the same results. I think/hope you will
+
+```{r}
+#original 
+origfit <- gamm4(spnbmd ~ s(age,k=10,bs="cr") + black + hispanic + white,
+              random= ~(1|idnum),data = femSBMD)
+
+#new
+newfit <- gamm4(spnbmd ~ s(age,k=10,bs="cr") + black + hispanic + white,
+              random= ~(1|idnum2),data = femSBMD)
+
+summary(origfit$gam)
+summary(newfit$gam)
+anova(origfit$mer, newfit$mer)
+```
+Both summary results match. So we can say that the particular value of idnum does not matter in gamm's grouping.
+
+### 2. Get the data set pigWeights.csv from Canvas. The variable weight is the response, and the variable num.weeks is the date of the repeated measures
+
+```{r}
+pigs = read.csv(file="pigWeights.csv")
+head(pigs)
+```
+
+### 2a. Display the lattice plot from library(lattice). Use the example from the spinal bone mineral density data to do this. I covered this in class, but in this case there is only 1 population and no ANCOVA.
+
+```{r}
+library(lattice)
+pigsvis = xyplot(weight ~ num.weeks,
+                     group = id.num,as.table = TRUE,
+                     data = pigs,
+                     strip = strip.custom(par.strip.text
+                                          = list(cex = 1.5)),
+                     par.settings = list(layout.heights
+                                         =list(strip=1.6)),
+                     scales = list(cex = 1.25),
+                     xlab = list("num weeks",cex = 1.5),
+                     ylab = list(expression(paste(
+                       "pig weights")),
+                       cex = 1.5),
+                     panel = function(x,y,subscripts,groups)
+                     {  
+                       panel.grid() 
+                       panel.superpose(x,y,subscripts,groups,
+                                       type = "b",pch = 16,lwd = 2)
+                     })
+plot(pigsvis)
+```
+
+### 2b. Looking at the data, do you think a random intercept model holds for these data? Why or why not? You might want to look at Lecture 15 where I described the means and variances of a random intercept model.
+
+Looking at the plots, the difference seems to be the starting point but the slope seems to be the same which indicatesthat there is a random intercept (the starting point for each plot seems random)
+
+### 2c. Fit the random intercept model with num_weeks modeled as a spline. Do a summary and show your results. Show the between-person variance of the intercept and the within-person variance of the random errors. You may use either mgcv::gamm or gamm4::gamm4.
+
+```{r}
+fitpigs <- gamm4(weight ~ s(I(num.weeks),k=8,bs="cr"),
+             random= ~(1|id.num),data = pigs)
+
+summary(fitpigs$gam)
+summary(fitpigs$mer)
+```
+sigma_u^2 is 15.1524
+sigma_e^2 is 4.2981
+
+
+### 2d. Using anova() in gamm4::gamm4, to test whether a spline is needed as compared to a linear and a quadratic effect.
+
+```{r}
+fitL <- gamm4(weight ~ I(num.weeks),
+              random= ~(1|id.num),data = pigs)
+summary(fitL$gam)
+fitQ <- gamm4(weight ~ I(num.weeks) + I(num.weeks^2),
+              random= ~(1|id.num),data = pigs)
+summary(fitQ$gam)
+#compare fits
+anova(fitpigs$mer,fitL$mer)
+anova(fitpigs$mer,fitQ$mer)
+```
+Linear versus spline: The p-value is 0.09679 which indicates that spline model is not significant. Quadratic versus Spline: Does not produce a p-value.
+
+### 2e. Compare the quadratic and linear fits as well
+
+```{r}
+anova(fitQ$mer,fitL$mer)
+```
+The p-value is 0.3869 which means quadratic model is not significant. So overall, we can see that linear model might be the best fit here. 
+
+
+### 2f. As in the spinal bone mineral density data, plot the fixed effects function against num.weeks, and include a pointwise 95% confidence interval for it.
+
+```{r}
+plot(fitpigs$gam,shade = TRUE,shade.col = "palegreen",bty = "l")
+```
+
+
+
+### 2g. Since you have already computed var(U) and var( ε ), what is the estimated withinperson correlation for this model?
+
+```{r}
+#sigma_u^2 is 15.1524
+#sigma_e^2 is 4.2981
+ratio = 4.2981/15.1524
+corr = (1 + ratio) ^ -1
+print("Within person correlation is: ")
+corr
+```
+
